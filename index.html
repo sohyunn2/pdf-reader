@@ -71,6 +71,30 @@
   .book-meta { margin-top: 6px; font-size: 12.5px; color: var(--sub); }
   .bar { margin-top: 8px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
   .bar > i { display: block; height: 100%; background: var(--accent); }
+  .book { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; transition: box-shadow .15s, transform .15s; }
+  .book.dragging { position: relative; z-index: 5; transform: scale(1.03); box-shadow: 0 10px 28px rgba(0,0,0,.28);
+    outline: 2px solid var(--accent); }
+  body.drag-on { overflow: hidden; touch-action: none; }
+  .sort-hint { margin: 2px 2px 0; font-size: 12px; color: var(--sub); text-align: right; }
+  .folder { cursor: pointer; }
+  .folder .f-icon { width: 40px; height: 40px; border-radius: 10px; background: var(--btn);
+    display: grid; place-items: center; flex-shrink: 0; }
+  .folder .f-icon svg { width: 22px; height: 22px; stroke: var(--sub); fill: none; stroke-width: 1.8; stroke-linejoin: round; }
+  .section-label { margin: 22px 2px 0; font-size: 12.5px; color: var(--sub); }
+  .ep-nav { display: flex; gap: 10px; margin-top: 28px; }
+  .ep-card { flex: 1; min-width: 0; text-align: left; padding: 14px 16px; border-radius: 14px; border: 0;
+    background: var(--card); font-family: var(--sans); }
+  .ep-card.next { text-align: right; }
+  .ep-card[hidden] { display: none; }
+  .ep-label { display: block; font-size: 12.5px; color: var(--sub); margin-bottom: 4px; }
+  .ep-card.next .ep-label { color: var(--accent); font-weight: 600; }
+  .ep-title { display: block; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bb-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .bb-row .pos { flex: 1; margin: 0; }
+  .bb-btn { border: 0; background: none; font-size: 13px; color: var(--accent); padding: 6px 2px; white-space: nowrap; }
+  .bb-btn:disabled { color: var(--line); }
+  .pick-list button { display: flex; align-items: center; gap: 8px; }
+  .pick-list button.on { color: var(--accent); font-weight: 600; }
   .empty { margin-top: 60px; text-align: center; color: var(--sub); font-size: 14px; line-height: 1.7; }
 
   /* 리더 */
@@ -154,7 +178,10 @@
 <!-- 서재 화면 -->
 <section id="libView">
   <header class="topbar">
-    <h1>서재</h1>
+    <button class="icon-btn hidden" id="folderBack" aria-label="서재로"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <h1 id="libTitle">서재</h1>
+    <button class="icon-btn" id="newFolderBtn" aria-label="새 폴더"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/></svg></button>
+    <button class="icon-btn hidden" id="folderMenuBtn" aria-label="폴더 메뉴">⋯</button>
     <button class="icon-btn" id="libGear" aria-label="설정">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
@@ -163,7 +190,7 @@
     <button class="add-btn" id="addBtn">＋ PDF 추가</button>
     <input type="file" id="fileInput" accept="application/pdf,.pdf" multiple class="hidden">
     <p class="status" id="status"></p>
-    <div class="sort" id="sortSeg"><button data-v="title">제목순</button><button data-v="recent">최근 읽은 순</button></div>
+    <div class="sort" id="sortSeg"><button data-v="title">제목순</button><button data-v="custom">내 순서</button><button data-v="recent">최근 읽은 순</button></div>
     <div id="bookList"></div>
   </div>
 </section>
@@ -186,10 +213,18 @@
     <div class="art-meta" id="artMeta"></div>
     <div class="body" id="artBody"></div>
     <div class="end">— 끝 —</div>
+    <div class="ep-nav" id="epNav">
+      <button class="ep-card" id="endPrev"><span class="ep-label">이전 편</span><span class="ep-title"></span></button>
+      <button class="ep-card next" id="endNext"><span class="ep-label">다음 편 →</span><span class="ep-title"></span></button>
+    </div>
   </article>
   <div class="bottombar" id="bottomBar"><div class="inner">
     <input type="range" id="seek" min="0" max="1000" step="1" value="0" aria-label="읽은 위치">
-    <div class="pos" id="pos"></div>
+    <div class="bb-row">
+      <button class="bb-btn" id="barPrev">◀ 이전 편</button>
+      <div class="pos" id="pos"></div>
+      <button class="bb-btn" id="barNext">다음 편 ▶</button>
+    </div>
   </div></div>
 </section>
 
@@ -273,19 +308,23 @@
     if (dbp) return dbp;
     dbp = new Promise((res, rej) => {
       try {
-        const r = indexedDB.open('pdf-reader', 1);
-        r.onupgradeneeded = () => r.result.createObjectStore('books', { keyPath: 'id' });
+        const r = indexedDB.open('pdf-reader', 2);
+        r.onupgradeneeded = () => {
+          const d = r.result;
+          if (!d.objectStoreNames.contains('books')) d.createObjectStore('books', { keyPath: 'id' });
+          if (!d.objectStoreNames.contains('folders')) d.createObjectStore('folders', { keyPath: 'id' });
+        };
         r.onsuccess = () => res(r.result);
         r.onerror = () => rej(r.error);
       } catch (e) { rej(e); }
     }).catch(() => null);
     return dbp;
   }
-  async function tx(mode, fn) {
+  async function tx(mode, fn, name = 'books') {
     const d = await db();
     if (!d) return fn(null);
     return new Promise((res, rej) => {
-      const t = d.transaction('books', mode); const s = t.objectStore('books');
+      const t = d.transaction(name, mode); const s = t.objectStore(name);
       const out = fn(s);
       t.oncomplete = () => res(out && out.result !== undefined ? out.result : out);
       t.onerror = () => rej(t.error);
@@ -300,6 +339,15 @@
       return tx('readwrite', s => s.put(b)); },
     async del(id) { const d = await db(); if (!d) { mem.delete(id); return; }
       return tx('readwrite', s => s.delete(id)); }
+  };
+  const fmem = new Map();
+  const folderStore = {
+    async all() { const d = await db(); if (!d) return [...fmem.values()];
+      return tx('readonly', s => s.getAll(), 'folders'); },
+    async put(f) { const d = await db(); if (!d) { fmem.set(f.id, f); return; }
+      return tx('readwrite', s => s.put(f), 'folders'); },
+    async del(id) { const d = await db(); if (!d) { fmem.delete(id); return; }
+      return tx('readwrite', s => s.delete(id), 'folders'); }
   };
 
   /* ---------- PDF → 줄 단위 텍스트 ---------- */
@@ -375,34 +423,214 @@
   const fmtDate = ts => { const d = new Date(ts);
     return `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}.`; };
 
+  let libFolder = null; // 지금 열어둔 폴더 (null = 서재 맨 위)
+  const byTitle = (a, b) => a.title.localeCompare(b.title, 'ko', { numeric: true, sensitivity: 'base' });
+  const byOrder = (a, b) => ((a.order ?? 1e12) - (b.order ?? 1e12)) || byTitle(a, b);
+  const epSort = () => settings.sort === 'custom' ? byOrder : byTitle;
+  const byName = (a, b) => a.name.localeCompare(b.name, 'ko', { numeric: true, sensitivity: 'base' });
+
+  function bookCard(b) {
+    const pct = Math.round((b.progress || 0) * 100);
+    const el = document.createElement('div');
+    el.className = 'book';
+    el.innerHTML = `
+      <div class="book-main">
+        <div class="book-title"></div>
+        <div class="book-meta">${b.lastRead ? '최근 ' + fmtDate(b.lastRead) : '추가 ' + fmtDate(b.added)} · ${b.pageTotal ? `${b.pageNo} / ${b.pageTotal} · ` : ''}${pct}%</div>
+        <div class="bar"><i style="width:${pct}%"></i></div>
+      </div>
+      <button class="icon-btn" aria-label="더보기">⋯</button>`;
+    el.querySelector('.book-title').textContent = b.title;
+    el.dataset.id = b.id;
+    el.querySelector('.book-main').onclick = () => { if (!justDragged) openBook(b.id); };
+    el.querySelector('.icon-btn').onclick = () => { if (!justDragged) bookMenu(b); };
+    enableDrag(el);
+    return el;
+  }
+  function folderCard(f, items) {
+    const el = document.createElement('div');
+    el.className = 'book folder';
+    const read = items.filter(b => (b.progress || 0) > 0.98).length;
+    el.innerHTML = `<div class="f-icon"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+      <div class="book-main"><div class="book-title"></div>
+        <div class="book-meta">${items.length}편 · 다 읽은 글 ${read}편</div></div>
+      <button class="icon-btn" aria-label="폴더 메뉴">⋯</button>`;
+    el.querySelector('.book-title').textContent = f.name;
+    el.querySelector('.book-main').onclick = () => { libFolder = f.id; renderLib(); scrollTo(0, 0); };
+    el.querySelector('.f-icon').onclick = el.querySelector('.book-main').onclick;
+    el.querySelector('.icon-btn').onclick = e => { e.stopPropagation(); folderMenu(f); };
+    return el;
+  }
+
+  /* 꾹 눌러서 순서 바꾸기 */
+  let justDragged = false;
+  function enableDrag(el) {
+    let timer = null, dragging = false, sy = 0, sx = 0, lastY = 0, scrollTimer = null;
+    const cards = () => [...$('bookList').querySelectorAll('.book:not(.folder)')];
+    const start = (x, y) => {
+      sx = x; sy = y; lastY = y;
+      timer = setTimeout(() => {
+        dragging = true;
+        el.classList.add('dragging'); document.body.classList.add('drag-on');
+        try { navigator.vibrate && navigator.vibrate(15); } catch (e) {}
+        scrollTimer = setInterval(() => {
+          if (lastY < 90) scrollBy(0, -8); else if (lastY > innerHeight - 90) scrollBy(0, 8); else return;
+          move(lastY);
+        }, 16);
+      }, 450);
+    };
+    const move = y => {
+      lastY = y;
+      for (const c of cards()) {
+        if (c === el) continue;
+        const r = c.getBoundingClientRect(), mid = r.top + r.height / 2;
+        const before = el.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_PRECEDING;
+        if (before && y < mid) { c.before(el); break; }
+        if (!before && y > mid) { c.after(el); }
+      }
+    };
+    const end = async () => {
+      clearTimeout(timer); clearInterval(scrollTimer);
+      if (!dragging) return;
+      dragging = false; justDragged = true; setTimeout(() => justDragged = false, 350);
+      el.classList.remove('dragging'); document.body.classList.remove('drag-on');
+      const ids = cards().map(c => c.dataset.id);
+      for (let i = 0; i < ids.length; i++) {
+        const b = await store.get(ids[i]); if (b) { b.order = i; await store.put(b); }
+      }
+      if (settings.sort !== 'custom') { settings.sort = 'custom'; saveSettings(); }
+      status('순서를 저장했어요'); setTimeout(() => status(''), 1800);
+      renderLib();
+    };
+    el.addEventListener('touchstart', e => start(e.touches[0].clientX, e.touches[0].clientY), { passive: true });
+    el.addEventListener('touchmove', e => {
+      const t = e.touches[0];
+      if (dragging) { e.preventDefault(); move(t.clientY); }
+      else if (Math.abs(t.clientY - sy) > 8 || Math.abs(t.clientX - sx) > 8) clearTimeout(timer); // 스크롤하는 중이면 취소
+    }, { passive: false });
+    el.addEventListener('touchend', end);
+    el.addEventListener('touchcancel', end);
+    el.addEventListener('contextmenu', e => e.preventDefault());
+    // 맥북: 마우스로 꾹 누르고 끌기
+    el.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      start(e.clientX, e.clientY);
+      const mm = ev => { if (dragging) move(ev.clientY); else if (Math.abs(ev.clientY - sy) > 8) clearTimeout(timer); };
+      const mu = () => { removeEventListener('mousemove', mm); removeEventListener('mouseup', mu); end(); };
+      addEventListener('mousemove', mm); addEventListener('mouseup', mu);
+    });
+  }
+
   async function renderLib() {
-    let books = [];
+    let books = [], folders = [];
     try { books = await store.all(); } catch (e) {}
-    if (settings.sort === 'recent') books.sort((a, b) => (b.lastRead || b.added) - (a.lastRead || a.added));
-    else books.sort((a, b) => a.title.localeCompare(b.title, 'ko', { numeric: true, sensitivity: 'base' }));
+    try { folders = await folderStore.all(); } catch (e) {}
+    const fids = new Set(folders.map(f => f.id));
+    books.forEach(b => { if (b.folder && !fids.has(b.folder)) b.folder = null; });
+    let folder = folders.find(f => f.id === libFolder) || null;
+    if (!folder) libFolder = null;
+
+    $('libTitle').textContent = folder ? folder.name : '서재';
+    $('folderBack').classList.toggle('hidden', !folder);
+    $('newFolderBtn').classList.toggle('hidden', !!folder);
+    $('folderMenuBtn').classList.toggle('hidden', !folder);
+    $('addBtn').textContent = folder ? '＋ 이 폴더에 PDF 추가' : '＋ PDF 추가';
+
+    const shown = books.filter(b => (b.folder || null) === libFolder);
+    if (settings.sort === 'recent') shown.sort((a, b) => (b.lastRead || b.added) - (a.lastRead || a.added));
+    else if (settings.sort === 'custom') shown.sort(byOrder);
+    else shown.sort(byTitle);
     document.querySelectorAll('#sortSeg button').forEach(x => x.classList.toggle('on', x.dataset.v === settings.sort));
+
     const list = $('bookList');
     list.innerHTML = '';
-    if (!books.length) {
-      list.innerHTML = '<div class="empty">아직 올린 PDF가 없어요.<br>위의 <b>＋ PDF 추가</b>를 눌러 올려 보세요.</div>';
+    if (!folder) {
+      folders.sort(byName).forEach(f => list.appendChild(folderCard(f, books.filter(b => b.folder === f.id))));
+      if (folders.length && shown.length) {
+        const lb = document.createElement('div'); lb.className = 'section-label'; lb.textContent = '폴더 밖에 있는 글';
+        list.appendChild(lb);
+      }
+    }
+    shown.forEach(b => list.appendChild(bookCard(b)));
+    if (shown.length > 1) {
+      const h = document.createElement('div'); h.className = 'sort-hint'; h.textContent = '글을 꾹 누르면 순서를 바꿀 수 있어요';
+      list.appendChild(h);
+    }
+    if (!list.children.length) {
+      list.innerHTML = folder
+        ? '<div class="empty">폴더가 비어 있어요.<br><b>＋ 이 폴더에 PDF 추가</b>로 올리거나,<br>서재에 있는 글의 ⋯ → <b>폴더로 이동</b>을 눌러 보세요.</div>'
+        : '<div class="empty">아직 올린 PDF가 없어요.<br>위의 <b>＋ PDF 추가</b>를 눌러 올려 보세요.</div>';
+    }
+  }
+
+  /* 폴더 */
+  function folderNameDialog(title, initial, onSave) {
+    showDialog(`<h3>${title}</h3><input id="fnInput" placeholder="예: 트루엔딩루트">`, [
+      { label: '취소' },
+      { label: '저장', cls: 'primary', fn: async () => { const v = $('fnInput').value.trim(); if (v) await onSave(v); } }
+    ], () => { const i = $('fnInput'); i.value = initial || ''; i.focus(); i.select(); });
+  }
+  function newFolder(after) {
+    folderNameDialog('새 폴더', '', async name => {
+      const f = { id: 'f' + Date.now() + Math.random().toString(36).slice(2, 6), name, created: Date.now() };
+      await folderStore.put(f);
+      if (after) await after(f); else renderLib();
+    });
+  }
+  function folderMenu(f) {
+    showDialog(`<h3></h3><div class="menu-list">
+        <button data-a="rename">폴더 이름 바꾸기</button>
+        <button data-a="del" class="del">폴더 삭제</button>
+        <button data-a="close">닫기</button></div>`, [], dlg => {
+      dlg.querySelector('h3').textContent = f.name;
+      dlg.querySelectorAll('.menu-list button').forEach(btn => btn.onclick = () => {
+        const a = btn.dataset.a;
+        if (a === 'close') return closeDialog();
+        if (a === 'rename') return folderNameDialog('폴더 이름 바꾸기', f.name, async v => { f.name = v; await folderStore.put(f); renderLib(); });
+        if (a === 'del') return folderDeleteDialog(f);
+      });
+    });
+  }
+  async function folderDeleteDialog(f) {
+    const inside = (await store.all()).filter(b => b.folder === f.id);
+    const removeFolder = async keepBooks => {
+      for (const b of inside) { if (keepBooks) { b.folder = null; await store.put(b); } else await store.del(b.id); }
+      await folderStore.del(f.id);
+      libFolder = null; renderLib();
+    };
+    if (!inside.length) {
+      showDialog('<h3>폴더를 삭제할까요?</h3><p>빈 폴더예요.</p>', [{ label: '취소' }, { label: '삭제', cls: 'danger', fn: () => removeFolder(true) }]);
       return;
     }
-    for (const b of books) {
-      const pct = Math.round((b.progress || 0) * 100);
-      const el = document.createElement('div');
-      el.className = 'book';
-      el.innerHTML = `
-        <div class="book-main">
-          <div class="book-title"></div>
-          <div class="book-meta">${b.lastRead ? '최근 ' + fmtDate(b.lastRead) : '추가 ' + fmtDate(b.added)} · ${b.pageTotal ? `${b.pageNo} / ${b.pageTotal} · ` : ''}${pct}%</div>
-          <div class="bar"><i style="width:${pct}%"></i></div>
-        </div>
-        <button class="icon-btn" aria-label="더보기">⋯</button>`;
-      el.querySelector('.book-title').textContent = b.title;
-      el.querySelector('.book-main').onclick = () => openBook(b.id);
-      el.querySelector('.icon-btn').onclick = () => bookMenu(b);
-      list.appendChild(el);
-    }
+    showDialog(`<h3>폴더 안의 글은 어떻게 할까요?</h3><p></p><div class="menu-list">
+        <button data-a="keep">글은 서재로 꺼내고 폴더만 삭제</button>
+        <button data-a="all" class="del">글도 같이 삭제</button>
+        <button data-a="close">취소</button></div>`, [], dlg => {
+      dlg.querySelector('p').textContent = `"${f.name}" 폴더에 글이 ${inside.length}편 있어요.`;
+      dlg.querySelectorAll('.menu-list button').forEach(btn => btn.onclick = async () => {
+        const a = btn.dataset.a; closeDialog();
+        if (a === 'keep') await removeFolder(true);
+        if (a === 'all') await removeFolder(false);
+      });
+    });
+  }
+  async function moveDialog(b) {
+    const folders = (await folderStore.all()).sort(byName);
+    const opts = [{ id: null, name: '서재 (폴더 없음)' }, ...folders];
+    showDialog(`<h3>폴더로 이동</h3><div class="menu-list pick-list"></div>`, [{ label: '닫기' }], dlg => {
+      const box = dlg.querySelector('.pick-list');
+      for (const o of opts) {
+        const btn = document.createElement('button');
+        btn.textContent = (o.id ? '📁 ' : '') + o.name;
+        if ((b.folder || null) === o.id) btn.className = 'on';
+        btn.onclick = async () => { b.folder = o.id; await store.put(b); closeDialog(); renderLib(); };
+        box.appendChild(btn);
+      }
+      const nb = document.createElement('button');
+      nb.textContent = '＋ 새 폴더 만들고 넣기';
+      nb.onclick = () => newFolder(async f => { b.folder = f.id; await store.put(b); renderLib(); });
+      box.appendChild(nb);
+    });
   }
 
   async function addFiles(files) {
@@ -421,7 +649,7 @@
         await store.put({
           id: 'b' + Date.now() + Math.random().toString(36).slice(2, 7),
           title: f.name.replace(/\.pdf$/i, ''),
-          lines, pages, added: Date.now(), lastRead: 0, progress: 0
+          lines, pages, added: Date.now(), lastRead: 0, progress: 0, folder: libFolder, order: Date.now() + ok
         });
         ok++;
       } catch (e) {
@@ -437,6 +665,7 @@
 
   function bookMenu(b) {
     showDialog(`<h3></h3><div class="menu-list">
+        <button data-a="move">폴더로 이동</button>
         <button data-a="rename">이름 바꾸기</button>
         <button data-a="reset">처음부터 읽기</button>
         <button data-a="del" class="del">삭제</button>
@@ -447,6 +676,7 @@
         if (a === 'close') return closeDialog();
         if (a === 'reset') { b.progress = 0; await store.put(b); closeDialog(); return renderLib(); }
         if (a === 'rename') return renameDialog(b);
+        if (a === 'move') return moveDialog(b);
         if (a === 'del') return deleteDialog(b);
       });
     });
@@ -476,6 +706,7 @@
     $('artTitle').textContent = b.title;
     $('artMeta').textContent = `PDF ${b.pages}쪽 · 추가 ${fmtDate(b.added)}`;
     renderBody();
+    await setupEpisodeNav();
     $('libView').classList.add('hidden');
     $('readView').classList.remove('hidden');
     $('readView').classList.remove('chrome-off');
@@ -659,9 +890,35 @@
     if (e.key === 'ArrowLeft') { e.preventDefault(); goPage(page - 1); }
   });
 
+  /* 이전 편 / 다음 편 (같은 폴더 안에서 제목순) */
+  let prevEp = null, nextEp = null;
+  async function setupEpisodeNav() {
+    let all = [];
+    try { all = await store.all(); } catch (e) {}
+    const sib = all.filter(b => (b.folder || null) === (current.folder || null)).sort(epSort());
+    const i = sib.findIndex(b => b.id === current.id);
+    prevEp = i > 0 ? sib[i - 1] : null;
+    nextEp = i >= 0 && i < sib.length - 1 ? sib[i + 1] : null;
+    const set = (btn, ep) => { btn.hidden = !ep; if (ep) btn.querySelector('.ep-title').textContent = ep.title; };
+    set($('endPrev'), prevEp); set($('endNext'), nextEp);
+    $('epNav').hidden = !prevEp && !nextEp;
+    $('barPrev').disabled = !prevEp; $('barNext').disabled = !nextEp;
+  }
+  async function goEpisode(ep) {
+    if (!ep) return;
+    clearTimeout(saveTimer);
+    await saveProgress();
+    const fresh = await store.get(ep.id);
+    if (fresh && (fresh.progress || 0) > 0.98) { fresh.progress = 0; await store.put(fresh); } // 다 읽은 편이면 처음부터
+    await openBook(ep.id);
+  }
+  ['endPrev', 'barPrev'].forEach(id => $(id).addEventListener('click', e => { e.stopPropagation(); goEpisode(prevEp); }));
+  ['endNext', 'barNext'].forEach(id => $(id).addEventListener('click', e => { e.stopPropagation(); goEpisode(nextEp); }));
+
   async function closeBook() {
     clearTimeout(saveTimer);
     await saveProgress();
+    libFolder = current.folder || null;
     current = null;
     $('pager').classList.add('hidden');
     document.body.style.overflow = '';
@@ -710,6 +967,9 @@
 
   /* ---------- 연결 ---------- */
   $('sortSeg').onclick = e => { const v = e.target.dataset.v; if (v) { settings.sort = v; saveSettings(); renderLib(); } };
+  $('newFolderBtn').onclick = () => newFolder();
+  $('folderBack').onclick = () => { libFolder = null; renderLib(); };
+  $('folderMenuBtn').onclick = async () => { const f = (await folderStore.all()).find(x => x.id === libFolder); if (f) folderMenu(f); };
   $('addBtn').onclick = () => $('fileInput').click();
   $('fileInput').onchange = e => { const fs = [...e.target.files]; e.target.value = ''; if (fs.length) addFiles(fs); };
   $('backBtn').onclick = closeBook;

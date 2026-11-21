@@ -76,7 +76,22 @@
     outline: 2px solid var(--accent); }
   body.drag-on { overflow: hidden; touch-action: none; }
   .sort-hint { margin: 2px 2px 0; font-size: 12px; color: var(--sub); text-align: right; }
-  .folder { cursor: pointer; }
+  .folder { cursor: pointer; transition: transform .15s, box-shadow .15s; }
+  .folder.drop-target { transform: scale(1.04); box-shadow: 0 0 0 2px var(--accent); }
+  .folder.drop-target .f-icon { background: var(--accent); }
+  .folder.drop-target .f-icon svg { stroke: #fff; }
+  .pick-check { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 2px; border: 0;
+    border-bottom: 1px solid var(--line); background: none; text-align: left; font-size: 15px; }
+  .pick-check:last-child { border-bottom: 0; }
+  .pick-check .box { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--sub); flex-shrink: 0;
+    display: grid; place-items: center; font-size: 14px; color: #fff; }
+  .pick-check.on .box { background: var(--accent); border-color: var(--accent); }
+  .pick-check .pc-text { flex: 1; min-width: 0; }
+  .pick-check .pc-title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pick-check .pc-sub { display: block; font-size: 12px; color: var(--sub); margin-top: 2px; }
+  .pick-scroll { max-height: 55vh; overflow-y: auto; margin: 0 -4px; padding: 0 4px; }
+  .pick-tools { display: flex; justify-content: space-between; font-size: 13px; color: var(--sub); margin-bottom: 4px; }
+  .pick-tools button { border: 0; background: none; color: var(--accent); font-size: 13px; padding: 4px 0; }
   .folder .f-icon { width: 40px; height: 40px; border-radius: 10px; background: var(--btn);
     display: grid; place-items: center; flex-shrink: 0; }
   .folder .f-icon svg { width: 22px; height: 22px; stroke: var(--sub); fill: none; stroke-width: 1.8; stroke-linejoin: round; }
@@ -189,6 +204,7 @@
   <div class="wrap">
     <button class="add-btn" id="addBtn">＋ PDF 추가</button>
     <input type="file" id="fileInput" accept="application/pdf,.pdf" multiple class="hidden">
+    <button class="add-btn hidden" id="importBtn" style="margin-top:10px">⇩ 서재에 있는 글 가져오기</button>
     <p class="status" id="status"></p>
     <div class="sort" id="sortSeg"><button data-v="title">제목순</button><button data-v="custom">내 순서</button><button data-v="recent">최근 읽은 순</button></div>
     <div id="bookList"></div>
@@ -450,6 +466,7 @@
   function folderCard(f, items) {
     const el = document.createElement('div');
     el.className = 'book folder';
+    el.dataset.fid = f.id;
     const read = items.filter(b => (b.progress || 0) > 0.98).length;
     el.innerHTML = `<div class="f-icon"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
       <div class="book-main"><div class="book-title"></div>
@@ -465,8 +482,9 @@
   /* 꾹 눌러서 순서 바꾸기 */
   let justDragged = false;
   function enableDrag(el) {
-    let timer = null, dragging = false, sy = 0, sx = 0, lastY = 0, scrollTimer = null;
+    let timer = null, dragging = false, sy = 0, sx = 0, lastY = 0, lastX = 0, scrollTimer = null, dropFolder = null;
     const cards = () => [...$('bookList').querySelectorAll('.book:not(.folder)')];
+    const folderCards = () => [...$('bookList').querySelectorAll('.folder')];
     const start = (x, y) => {
       sx = x; sy = y; lastY = y;
       timer = setTimeout(() => {
@@ -479,8 +497,17 @@
         }, 16);
       }, 450);
     };
-    const move = y => {
-      lastY = y;
+    const move = (y, x = lastX) => {
+      lastY = y; lastX = x;
+      // 폴더 위에 올리면 → 폴더에 넣기 (아이폰 홈 화면처럼)
+      dropFolder = null;
+      for (const f of folderCards()) {
+        const r = f.getBoundingClientRect();
+        const over = y >= r.top && y <= r.bottom;
+        f.classList.toggle('drop-target', over);
+        if (over) dropFolder = f.dataset.fid;
+      }
+      if (dropFolder) return;
       for (const c of cards()) {
         if (c === el) continue;
         const r = c.getBoundingClientRect(), mid = r.top + r.height / 2;
@@ -494,6 +521,14 @@
       if (!dragging) return;
       dragging = false; justDragged = true; setTimeout(() => justDragged = false, 350);
       el.classList.remove('dragging'); document.body.classList.remove('drag-on');
+      folderCards().forEach(f => f.classList.remove('drop-target'));
+      if (dropFolder) {
+        const b = await store.get(el.dataset.id), f = (await folderStore.all()).find(x => x.id === dropFolder);
+        if (b && f) { b.folder = f.id; b.order = Date.now(); await store.put(b);
+          status(`"${f.name}" 폴더에 넣었어요`); setTimeout(() => status(''), 1800); }
+        dropFolder = null;
+        return renderLib();
+      }
       const ids = cards().map(c => c.dataset.id);
       for (let i = 0; i < ids.length; i++) {
         const b = await store.get(ids[i]); if (b) { b.order = i; await store.put(b); }
@@ -505,7 +540,7 @@
     el.addEventListener('touchstart', e => start(e.touches[0].clientX, e.touches[0].clientY), { passive: true });
     el.addEventListener('touchmove', e => {
       const t = e.touches[0];
-      if (dragging) { e.preventDefault(); move(t.clientY); }
+      if (dragging) { e.preventDefault(); move(t.clientY, t.clientX); }
       else if (Math.abs(t.clientY - sy) > 8 || Math.abs(t.clientX - sx) > 8) clearTimeout(timer); // 스크롤하는 중이면 취소
     }, { passive: false });
     el.addEventListener('touchend', end);
@@ -515,7 +550,7 @@
     el.addEventListener('mousedown', e => {
       if (e.button !== 0) return;
       start(e.clientX, e.clientY);
-      const mm = ev => { if (dragging) move(ev.clientY); else if (Math.abs(ev.clientY - sy) > 8) clearTimeout(timer); };
+      const mm = ev => { if (dragging) move(ev.clientY, ev.clientX); else if (Math.abs(ev.clientY - sy) > 8) clearTimeout(timer); };
       const mu = () => { removeEventListener('mousemove', mm); removeEventListener('mouseup', mu); end(); };
       addEventListener('mousemove', mm); addEventListener('mouseup', mu);
     });
@@ -535,6 +570,7 @@
     $('newFolderBtn').classList.toggle('hidden', !!folder);
     $('folderMenuBtn').classList.toggle('hidden', !folder);
     $('addBtn').textContent = folder ? '＋ 이 폴더에 PDF 추가' : '＋ PDF 추가';
+    $('importBtn').classList.toggle('hidden', !folder);
 
     const shown = books.filter(b => (b.folder || null) === libFolder);
     if (settings.sort === 'recent') shown.sort((a, b) => (b.lastRead || b.added) - (a.lastRead || a.added));
@@ -552,8 +588,9 @@
       }
     }
     shown.forEach(b => list.appendChild(bookCard(b)));
-    if (shown.length > 1) {
-      const h = document.createElement('div'); h.className = 'sort-hint'; h.textContent = '글을 꾹 누르면 순서를 바꿀 수 있어요';
+    if (shown.length > 1 || (!folder && folders.length && shown.length)) {
+      const h = document.createElement('div'); h.className = 'sort-hint';
+      h.textContent = !folder && folders.length ? '글을 꾹 눌러 끌면 순서 바꾸기 · 폴더 위에 놓으면 폴더에 넣기' : '글을 꾹 누르면 순서를 바꿀 수 있어요';
       list.appendChild(h);
     }
     if (!list.children.length) {
@@ -565,7 +602,7 @@
 
   /* 폴더 */
   function folderNameDialog(title, initial, onSave) {
-    showDialog(`<h3>${title}</h3><input id="fnInput" placeholder="예: 트루엔딩루트">`, [
+    showDialog(`<h3>${title}</h3><input id="fnInput" placeholder="폴더 이름">`, [
       { label: '취소' },
       { label: '저장', cls: 'primary', fn: async () => { const v = $('fnInput').value.trim(); if (v) await onSave(v); } }
     ], () => { const i = $('fnInput'); i.value = initial || ''; i.focus(); i.select(); });
@@ -612,6 +649,49 @@
         if (a === 'keep') await removeFolder(true);
         if (a === 'all') await removeFolder(false);
       });
+    });
+  }
+  async function importDialog() {
+    const [all, folders] = [await store.all(), await folderStore.all()];
+    const fname = id => (folders.find(f => f.id === id) || {}).name;
+    const cands = all.filter(b => (b.folder || null) !== libFolder)
+      .sort((a, b) => (!!a.folder - !!b.folder) || byTitle(a, b)); // 폴더 밖 글 먼저
+    if (!cands.length) {
+      showDialog('<h3>가져올 글이 없어요</h3><p>서재에 있는 글이 전부 이 폴더에 들어 있어요.</p>', [{ label: '확인', cls: 'primary' }]);
+      return;
+    }
+    const picked = new Set();
+    showDialog(`<h3>서재에서 가져오기</h3>
+      <div class="pick-tools"><span id="pickCount">0개 선택</span><button id="pickAll">전체 선택</button></div>
+      <div class="pick-scroll" id="pickBox"></div>`, [
+      { label: '취소' },
+      { label: '가져오기', cls: 'primary', fn: async () => {
+          let n = Date.now();
+          for (const b of cands) if (picked.has(b.id)) { b.folder = libFolder; b.order = n++; await store.put(b); }
+          if (picked.size) { status(`${picked.size}개 가져왔어요`); setTimeout(() => status(''), 1800); }
+          renderLib();
+        } }
+    ], dlg => {
+      const box = $('pickBox');
+      const sync = () => {
+        $('pickCount').textContent = `${picked.size}개 선택`;
+        $('pickAll').textContent = picked.size === cands.length ? '선택 해제' : '전체 선택';
+        box.querySelectorAll('.pick-check').forEach(el => {
+          const on = picked.has(el.dataset.id); el.classList.toggle('on', on); el.querySelector('.box').textContent = on ? '✓' : '';
+        });
+      };
+      for (const b of cands) {
+        const btn = document.createElement('button');
+        btn.className = 'pick-check'; btn.dataset.id = b.id;
+        const pct = Math.round((b.progress || 0) * 100);
+        btn.innerHTML = '<span class="box"></span><span class="pc-text"><span class="pc-title"></span><span class="pc-sub"></span></span>';
+        btn.querySelector('.pc-title').textContent = b.title;
+        btn.querySelector('.pc-sub').textContent = (b.folder ? `📁 ${fname(b.folder)} · ` : '서재 · ') + `${pct}% 읽음`;
+        btn.onclick = () => { picked.has(b.id) ? picked.delete(b.id) : picked.add(b.id); sync(); };
+        box.appendChild(btn);
+      }
+      $('pickAll').onclick = () => { if (picked.size === cands.length) picked.clear(); else cands.forEach(b => picked.add(b.id)); sync(); };
+      sync();
     });
   }
   async function moveDialog(b) {
@@ -968,6 +1048,7 @@
   /* ---------- 연결 ---------- */
   $('sortSeg').onclick = e => { const v = e.target.dataset.v; if (v) { settings.sort = v; saveSettings(); renderLib(); } };
   $('newFolderBtn').onclick = () => newFolder();
+  $('importBtn').onclick = importDialog;
   $('folderBack').onclick = () => { libFolder = null; renderLib(); };
   $('folderMenuBtn').onclick = async () => { const f = (await folderStore.all()).find(x => x.id === libFolder); if (f) folderMenu(f); };
   $('addBtn').onclick = () => $('fileInput').click();
